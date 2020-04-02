@@ -1,4 +1,4 @@
-totitle <- function(x) {
+totitle <- function(x){
   s <- strsplit(x, " |_")[[1]]
   paste(
     toupper(substring(s, 1, 1)), tolower(substring(s, 2)),
@@ -6,27 +6,134 @@ totitle <- function(x) {
   )
 }
 
+consolidate_levels <- function(df_states, df_counties){
+  clean_states <- 
+    df_states %>% 
+    dplyr::rename_all(toupper) %>% 
+    dplyr::transmute(
+      DATE,
+      LEVEL = "State",
+      STATE_FIPS = FIPS,
+      COUNTY_FIPS = "000",
+      STATE_NAME = STATE,
+      COUNTY_NAME = NA_character_,
+      TOTAL_CASES = CASES,
+      TOTAL_DEATHS = DEATHS
+    ) 
+  
+  clean_counties <- 
+    df_counties %>% 
+    dplyr::rename_all(toupper) %>% 
+    dplyr::transmute(
+      DATE,
+      LEVEL = "County",
+      STATE_FIPS = dplyr::if_else(
+        stringr::str_length(FIPS) == 5,
+        stringr::str_trunc(FIPS, 2, "right", ""),
+        NA_character_
+      ),
+      COUNTY_FIPS = dplyr::if_else(
+        stringr::str_length(FIPS) == 5,
+        stringr::str_trunc(FIPS, 3, "left", ""),
+        NA_character_
+      ),
+      STATE_NAME = STATE,
+      COUNTY_NAME = COUNTY,
+      TOTAL_CASES = CASES,
+      TOTAL_DEATHS = DEATHS
+    )
+  
+  dplyr::bind_rows(clean_states, clean_counties)
+}
+
+add_population <- function(df, census_df){
+  population <- census_df %>% 
+    dplyr::transmute(
+      LEVEL = dplyr::case_when(
+        SUMLEV == "040" ~ "State",
+        SUMLEV == "050" ~ "County",
+        TRUE ~ SUMLEV
+      ),
+      STATE_FIPS = STATE,
+      COUNTY_FIPS = COUNTY,
+      STATE_NAME = STNAME,
+      COUNTY_NAME = CTYNAME,
+      POPULATION = POPESTIMATE2019
+    ) %>% 
+    dplyr::select(STATE_FIPS, COUNTY_FIPS, POPULATION)
+    
+  dplyr::left_join(df, population, by = c("STATE_FIPS", "COUNTY_FIPS")) 
+}
+
+add_variables <- function(df){
+  df %>% 
+    # Organize and group by reporting unit
+    dplyr::arrange(STATE_FIPS, COUNTY_FIPS, DATE) %>% 
+    dplyr::group_by(STATE_FIPS, COUNTY_FIPS) %>% 
+    dplyr::mutate(
+      # Proportion of population infected/dead
+      TOTAL_INFECTED_PER_K = 1000*TOTAL_CASES/POPULATION,
+      TOTAL_DEATHS_PER_K = 1000*TOTAL_DEATHS/POPULATION,
+      
+      # Incremental cases/deaths per day
+      NEW_CASES = TOTAL_CASES - dplyr::lag(TOTAL_CASES, 1),
+      NEW_DEATHS = TOTAL_DEATHS - dplyr::lag(TOTAL_DEATHS, 1),
+      NEW_CASES = dplyr::if_else(is.na(NEW_CASES), TOTAL_CASES, NEW_CASES),
+      NEW_DEATHS = dplyr::if_else(is.na(NEW_DEATHS), TOTAL_DEATHS, NEW_DEATHS),
+      
+      # Rolling 7-day incremental deaths/cases
+      AVG_NEW_CASES = zoo::rollmeanr(NEW_CASES, 7, fill = NA),
+      AVG_NEW_DEATHS = zoo::rollmeanr(NEW_DEATHS, 7, fill = NA),
+      
+      # Current infection/mortality rate
+      AVG_INFECTION_RATE = AVG_NEW_CASES/TOTAL_CASES,
+      AVG_DEATH_RATE = AVG_NEW_DEATHS/TOTAL_CASES,
+      
+      LATEST_DATA_IND = dplyr::if_else(DATE == max(DATE), 1, 0)
+    ) %>% 
+    dplyr::ungroup()
+}
+
+beautify <- function(df){
+  df %>% 
+    dplyr::mutate(
+      COUNTY_FIPS = dplyr::if_else(
+        COUNTY_FIPS == "000", NA_character_, COUNTY_FIPS
+      ) # "000" needed for join, but analysis is cleaner if NA instead
+    ) %>% 
+    dplyr::mutate_if(is.character, forcats::as_factor) %>% 
+    dplyr::select(-POPULATION, POPULATION)
+}
+
+get_plot_data <- function(df, metric, level, states, counties, log_y, latest){
+  df %>% 
+    dplyr::filter(LEVEL == level) %>%           # State or county data?
+    dplyr::filter("All" %in% states | STATE_NAME %in% states) %>% 
+    dplyr::filter("All" %in% counties | COUNTY_NAME %in% counties) %>% 
+    dplyr::filter(!log_y | {{metric}} != 0) %>% # Can't log transform a 0
+    dplyr::filter(!is.na({{metric}})) %>%       # Avoid ggplot2 missing value warning
+    dplyr::filter(!latest | LATEST_DATA_IND == 1) %>% 
+    dplyr::select(DATE, {{metric}}, STATE_NAME, COUNTY_NAME)
+  }
+
 graph_timeseries <- function(df, metric, level, states, counties, log_y){
   title        <- paste0("# ", tolower(totitle(deparse(substitute(metric)))), " over time")
   subtitle     <- paste0("By ", tolower(level))
   x_lab        <- NULL
   y_lab        <- paste0("# ", tolower(totitle(deparse(substitute(metric)))))
   caption      <- "Source: NYT"
-  legend_title <- totitle(level)
-
-  plot_data <- df %>% 
-    dplyr::filter(LEVEL == level) %>%           # State or county data?
-    dplyr::filter("All" %in% states | STATE_NAME %in% states) %>% 
-    dplyr::filter("All" %in% counties | COUNTY_NAME %in% counties) %>% 
-    dplyr::filter(!log_y | {{metric}} != 0) %>% # Can't log transform a 0
-    dplyr::filter(!is.na({{metric}}))           # Avoid ggplot2 missing value warning
-
-  plot_data %>%
+  legend_title <- level
+  
+  get_plot_data(
+    df, {{metric}},
+    level, states, counties,
+    log_y, latest = FALSE
+  ) %>% 
     # Main plot
     ggplot2::ggplot(ggplot2::aes(
       x = DATE, y = {{metric}},
-      group = if (level == "STATE") {STATE_NAME} else {COUNTY_NAME},
-      color = if (level == "STATE") {STATE_NAME} else {COUNTY_NAME}
+      group = if (level == "State") {STATE_NAME} else {COUNTY_NAME},
+      color = if (level == "State") {STATE_NAME} else {COUNTY_NAME}
     )) +
     ggplot2::geom_line() +
     # Aesthetics
@@ -41,5 +148,39 @@ graph_timeseries <- function(df, metric, level, states, counties, log_y){
         title.position = "left",
         direction = "horizontal"
       )
+    ) 
+}
+
+graph_bars <- function(df, metric, level, states, counties, digits){
+  title        <- paste0("Latest value of ", tolower(totitle(deparse(substitute(metric)))))
+  subtitle     <- paste0("By ", tolower(level))
+  x_lab        <- NULL
+  y_lab        <- NULL
+  caption      <- "Source: NYT"
+  
+  get_plot_data(
+    df, {{metric}},
+    level, states, counties,
+    log_y = FALSE, latest = TRUE
+  ) %>% 
+    # Main plot
+    ggplot2::ggplot(ggplot2::aes(
+      x = if (level == "State") {
+        forcats::fct_reorder(STATE_NAME, {{metric}})
+        } else {
+        forcats::fct_reorder(COUNTY_NAME, {{metric}})
+      },
+      y = {{metric}},
+      label = round({{metric}}, digits)
+    )) +
+    ggplot2::geom_col(color = "white", fill = "blue") +
+    ggplot2::geom_text(
+      color = "grey",
+      size = 3.25, vjust = -1
+    ) +
+    # Aesthetics
+    ggplot2::labs(
+      title = title, subtitle = subtitle,
+      x = x_lab, y = y_lab, caption = caption
     )
 }
