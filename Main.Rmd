@@ -1,0 +1,240 @@
+---
+title: "COVID-19 Analysis"
+author: "Nathaniel Schmucker" 
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+runtime: shiny
+output: 
+  html_document:
+    theme: paper  
+---
+
+```{r setup, include = FALSE}
+library(readr)
+library(dplyr)
+library(stringr)
+library(zoo)     # masks as.Date
+library(forcats)
+
+library(shiny)
+library(shinyWidgets)
+library(htmltools)
+library(leaflet)
+library(DT)
+
+
+# Prevent code chunks from printing text, useful for cleaning up an analysis for presentation
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+source("./R/Utils.R")
+source("./R/Functions.R")
+
+# TODO: Fix population for NYT's noted regions
+
+```
+
+```{r get-data, include = FALSE}
+url_census   <- "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv"
+url_states   <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+url_counties <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
+
+raw_census   <- readr::read_csv(url(url_census))
+raw_states   <- readr::read_csv(url(url_states))
+raw_counties <- readr::read_csv(url(url_counties))
+
+# Get data on states (simplefeatures object)
+states <- tigris::states(
+  cb = TRUE, 
+  resolution = "500k", 
+  year = 2018,
+  class = "sf"
+) 
+
+# Get data on counties (simplefeatures object)
+counties <- tigris::counties(
+  state = NULL,
+  cb = TRUE,
+  resolution = "500k",
+  year = 2018,
+  class = "sf"
+) 
+
+```
+
+```{r clean-and-merge-data, include = FALSE}
+covid_19 <-
+  consolidate_levels(raw_states, raw_counties) %>% 
+  add_population(raw_census) %>% 
+  add_variables() %>% 
+  beautify()
+
+# Ensure combined, transformed data hasn't added/dropped rows
+stopifnot(nrow(covid_19) == nrow(raw_counties) + nrow(raw_states))
+
+#readr::write_csv(covid_19, paste0("./Data/COVID_19_", Sys.Date(), ".csv"))
+
+states <- states %>% 
+  sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
+  dplyr::filter(
+    !STATEFP %in% c(
+      "02", #Alaska
+      "60", #American Samoa
+      "69", #Commonwealth of the Northern Mariana Islands
+      "66", #Guam
+      "15", #Hawaii
+      "72", #Puerto Rico
+      "78"  #United States Virgin Islands
+    )
+  ) %>% 
+  dplyr::select(-STATENS, -AFFGEOID, -LSAD, -ALAND, -AWATER)
+
+counties <- counties %>%
+  sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
+  dplyr::filter(
+    !STATEFP %in% c(
+      "02", #Alaska
+      "60", #American Samoa
+      "69", #Commonwealth of the Northern Mariana Islands
+      "66", #Guam
+      "15", #Hawaii
+      "72", #Puerto Rico
+      "78"  #United States Virgin Islands
+    )
+  ) %>% 
+  dplyr::select(-COUNTYNS, -AFFGEOID, -LSAD, -ALAND, -AWATER)
+
+# rm(
+#   list = dplyr::setdiff(
+#     ls(),
+#     c(
+#       "covid_19",
+#       "totitle", "custom_theme",
+#       "get_plot_data", "graph_timeseries", "graph_bars"
+#     )
+#   )
+# )
+
+```
+
+```{r reactive-inputs}
+shiny::varSelectInput(
+  inputId = "metric", label = "Metric:",
+  data = dplyr::select(covid_19, 8:17)
+)
+
+shinyWidgets::selectizeGroupUI(
+  id = "geoFilters",
+  params = list(
+    LEVEL = list(inputId = "LEVEL", title = "Reporting level:"),
+    STATE_NAME = list(inputId = "STATE_NAME", title = "State:"),
+    COUNTY_NAME = list(inputId = "COUNTY_NAME", title = "County:")
+  ),
+  label = "Filters",
+  btn_label = "Clear filters",
+  inline = FALSE
+)
+
+```
+
+```{r reactive-filter}
+filter_covid_19 <- shiny::callModule(
+  module = shinyWidgets::selectizeGroupServer,
+  id = "geoFilters",
+  data = covid_19,
+  vars = c("LEVEL", "STATE_NAME", "COUNTY_NAME")
+)
+
+```
+
+```{r map}
+renderLeaflet({
+  data_frame <- filter_covid_19() %>%
+    prep_output_data(
+      metric = !!input$metric,
+      log_y = FALSE,
+      latest = TRUE
+    ) %>% 
+    dplyr::mutate(GEOID = as.character(GEOID))
+  
+  spatial_data <- if(data_frame$LEVEL[1] == "State") {states} else {counties}
+  
+  map <- tigris::geo_join(
+    spatial_data = spatial_data,
+    data_frame = data_frame,
+    by_sp = "GEOID",
+    by_df = "GEOID",
+    how = "inner"
+  )
+
+  pal <- leaflet::colorNumeric(
+    palette = "YlOrRd",
+    domain = map$VALUE_FULL
+  )
+  
+  leaflet(map) %>%
+    leaflet::addPolygons(
+      color = "#444444", weight = 1, smoothFactor = 0.5,
+      opacity = 1.0, fillOpacity = 0.5,
+      fillColor = ~pal(VALUE_FULL),
+      label = ~lapply(LABEL, htmltools::HTML),
+      highlightOptions = leaflet::highlightOptions(
+        color = "white", weight = 2, bringToFront = TRUE)
+    )
+})
+
+```
+
+```{r data-table-latest}
+DT::renderDataTable({
+  filter_covid_19() %>% 
+    prep_output_data(!!input$metric, log_y = FALSE, latest = TRUE) %>% 
+    dplyr::select(DATE, VALUE, STATE_NAME, COUNTY_NAME)
+})
+
+```
+
+```{r data-table-all}
+DT::renderDataTable({
+  filter_covid_19() %>% 
+    prep_output_data(!!input$metric, log_y = FALSE, latest = FALSE) %>% 
+    dplyr::select(DATE, VALUE, STATE_NAME, COUNTY_NAME)
+})
+
+```
+
+```{r visualize-data, eval = FALSE}
+level    <- "County" # Choose from: c("State", "County")
+states   <- "Pennsylvania" # Example: c("Pennsylvania", "New Jersey", "New York")
+counties <- c("Philadelphia", "Montgomery", "Delaware", "Chester", "Bucks") # Example: "All"
+log_y    <- FALSE
+
+graph_timeseries(covid_19, TOTAL_CASES, level, states, counties, log_y)
+graph_timeseries(covid_19, TOTAL_DEATHS, level, states, counties, log_y)
+
+graph_timeseries(covid_19, TOTAL_INFECTED_PER_100K, level, states, counties, log_y)
+graph_timeseries(covid_19, TOTAL_DEATHS_PER_100K, level, states, counties, log_y)
+
+graph_timeseries(covid_19, NEW_CASES, level, states, counties, log_y)
+graph_timeseries(covid_19, NEW_DEATHS, level, states, counties, log_y)
+
+graph_timeseries(covid_19, AVG_NEW_CASES, level, states, counties, log_y)
+graph_timeseries(covid_19, AVG_NEW_DEATHS, level, states, counties, log_y)
+
+graph_timeseries(covid_19, AVG_INFECTION_RATE, level, states, counties, log_y)
+graph_timeseries(covid_19, AVG_DEATH_RATE, level, states, counties, log_y)
+
+graph_bars(covid_19, TOTAL_CASES, level, states, counties, 0)
+graph_bars(covid_19, TOTAL_DEATHS, level, states, counties, 0)
+
+graph_bars(covid_19, TOTAL_INFECTED_PER_100K, level, states, counties, 1)
+graph_bars(covid_19, TOTAL_DEATHS_PER_100K, level, states, counties, 3)
+
+graph_bars(covid_19, NEW_CASES, level, states, counties, 0)
+graph_bars(covid_19, NEW_DEATHS, level, states, counties, 0)
+
+graph_bars(covid_19, AVG_NEW_CASES, level, states, counties, 0)
+graph_bars(covid_19, AVG_NEW_DEATHS, level, states, counties, 0)
+
+graph_bars(covid_19, AVG_INFECTION_RATE, level, states, counties, 3)
+graph_bars(covid_19, AVG_DEATH_RATE, level, states, counties, 3)
+
+```

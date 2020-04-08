@@ -1,11 +1,3 @@
-totitle <- function(x){
-  s <- strsplit(x, " |_")[[1]]
-  paste(
-    toupper(substring(s, 1, 1)), tolower(substring(s, 2)),
-    sep = "", collapse = " "
-  )
-}
-
 consolidate_levels <- function(df_states, df_counties){
   clean_states <- 
     df_states %>% 
@@ -13,6 +5,7 @@ consolidate_levels <- function(df_states, df_counties){
     dplyr::transmute(
       DATE,
       LEVEL = "State",
+      GEOID = FIPS,
       STATE_FIPS = FIPS,
       COUNTY_FIPS = "000",
       STATE_NAME = STATE,
@@ -27,6 +20,7 @@ consolidate_levels <- function(df_states, df_counties){
     dplyr::transmute(
       DATE,
       LEVEL = "County",
+      GEOID = FIPS,
       STATE_FIPS = dplyr::if_else(
         stringr::str_length(FIPS) == 5,
         stringr::str_trunc(FIPS, 2, "right", ""),
@@ -72,8 +66,8 @@ add_variables <- function(df){
     dplyr::group_by(STATE_FIPS, COUNTY_FIPS) %>% 
     dplyr::mutate(
       # Proportion of population infected/dead
-      TOTAL_INFECTED_PER_K = 1000*TOTAL_CASES/POPULATION,
-      TOTAL_DEATHS_PER_K = 1000*TOTAL_DEATHS/POPULATION,
+      TOTAL_INFECTED_PER_100K = 100000*TOTAL_CASES/POPULATION,
+      TOTAL_DEATHS_PER_100K = 100000*TOTAL_DEATHS/POPULATION,
       
       # Incremental cases/deaths per day
       NEW_CASES = TOTAL_CASES - dplyr::lag(TOTAL_CASES, 1),
@@ -103,6 +97,35 @@ beautify <- function(df){
     ) %>% 
     dplyr::mutate_if(is.character, forcats::as_factor) %>% 
     dplyr::select(-POPULATION, POPULATION)
+}
+
+prep_output_data <- function(df, metric, log_y, latest){
+  temp_df <-
+    df %>%
+    dplyr::filter(!log_y | {{metric}} != 0) %>% # Can't log transform a 0
+    dplyr::filter(!is.na({{metric}})) %>%       # Avoid ggplot2 missing value warning
+    dplyr::filter(!latest | LATEST_DATA_IND == 1)
+  
+  max_val <- temp_df %>% 
+    dplyr::summarize(MAX = max({{metric}})) %>%
+    dplyr::pull()
+  digits <- if(max_val > 100) {0} else if(max_val > 10) {1} else {2}
+  
+  temp_df %>% 
+    dplyr::mutate(
+      VALUE = round({{metric}}, digits),
+      LABEL = dplyr::if_else(
+        LEVEL == "State",
+        paste0("<strong>", STATE_NAME, "</strong><br/>", VALUE),
+        paste0("<strong>", COUNTY_NAME, "</strong><br/>", VALUE)
+      )
+    ) %>% 
+    dplyr::select(
+      LEVEL, GEOID,
+      DATE, VALUE_FULL = {{metric}}, VALUE,
+      STATE_NAME, COUNTY_NAME, LABEL
+    ) %>% 
+    dplyr::arrange(dplyr::desc(DATE), dplyr::desc(VALUE_FULL))
 }
 
 get_plot_data <- function(df, metric, level, states, counties, log_y, latest){
@@ -148,7 +171,8 @@ graph_timeseries <- function(df, metric, level, states, counties, log_y){
         title.position = "left",
         direction = "horizontal"
       )
-    ) 
+    ) +
+    custom_theme()
 }
 
 graph_bars <- function(df, metric, level, states, counties, digits){
@@ -182,5 +206,6 @@ graph_bars <- function(df, metric, level, states, counties, digits){
     ggplot2::labs(
       title = title, subtitle = subtitle,
       x = x_lab, y = y_lab, caption = caption
-    )
+    ) +
+    custom_theme()
 }

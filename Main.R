@@ -6,6 +6,7 @@ library(zoo)     # masks as.Date
 library(forcats)
 library(ggplot2)
 
+source("./R/Utils.R")
 source("./R/Functions.R")
 
 # TODO: Fix population for NYT's noted regions
@@ -34,21 +35,28 @@ readr::write_csv(covid_19, paste0("./Data/COVID_19_", Sys.Date(), ".csv"))
 rm(
   list = dplyr::setdiff(
     ls(),
-    c("covid_19", "totitle", "get_plot_data", "graph_timeseries", "graph_bars")
+    c(
+      "covid_19",
+      "totitle", "custom_theme",
+      "get_plot_data", "graph_timeseries", "graph_bars"
+    )
   )
 )
 
 # VISUALIZE DATA         #### #### #### #### #### #### #### #### #### #### ####
-level <- "County" # Choose from: c("State", "County")
-states <- "Pennsylvania" # Example: c("Pennsylvania", "New Jersey", "New York")
+level    <- "County" # Choose from: c("State", "County")
+states   <- "Pennsylvania" # Example: c("Pennsylvania", "New Jersey", "New York")
 counties <- c("Philadelphia", "Montgomery", "Delaware", "Chester", "Bucks") # Example: "All"
-log_y <- FALSE
+log_y    <- FALSE
 
 graph_timeseries(covid_19, TOTAL_CASES, level, states, counties, log_y)
 graph_timeseries(covid_19, TOTAL_DEATHS, level, states, counties, log_y)
 
-graph_timeseries(covid_19, TOTAL_INFECTED_PER_K, level, states, counties, log_y)
-graph_timeseries(covid_19, TOTAL_DEATHS_PER_K, level, states, counties, log_y)
+graph_timeseries(covid_19, TOTAL_INFECTED_PER_100K, level, states, counties, log_y)
+graph_timeseries(covid_19, TOTAL_DEATHS_PER_100K, level, states, counties, log_y)
+
+graph_timeseries(covid_19, NEW_CASES, level, states, counties, log_y)
+graph_timeseries(covid_19, NEW_DEATHS, level, states, counties, log_y)
 
 graph_timeseries(covid_19, AVG_NEW_CASES, level, states, counties, log_y)
 graph_timeseries(covid_19, AVG_NEW_DEATHS, level, states, counties, log_y)
@@ -59,8 +67,11 @@ graph_timeseries(covid_19, AVG_DEATH_RATE, level, states, counties, log_y)
 graph_bars(covid_19, TOTAL_CASES, level, states, counties, 0)
 graph_bars(covid_19, TOTAL_DEATHS, level, states, counties, 0)
 
-graph_bars(covid_19, TOTAL_INFECTED_PER_K, level, states, counties, 1)
-graph_bars(covid_19, TOTAL_DEATHS_PER_K, level, states, counties, 3)
+graph_bars(covid_19, TOTAL_INFECTED_PER_100K, level, states, counties, 1)
+graph_bars(covid_19, TOTAL_DEATHS_PER_100K, level, states, counties, 3)
+
+graph_bars(covid_19, NEW_CASES, level, states, counties, 0)
+graph_bars(covid_19, NEW_DEATHS, level, states, counties, 0)
 
 graph_bars(covid_19, AVG_NEW_CASES, level, states, counties, 0)
 graph_bars(covid_19, AVG_NEW_DEATHS, level, states, counties, 0)
