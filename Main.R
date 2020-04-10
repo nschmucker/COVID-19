@@ -52,7 +52,7 @@ log_y    <- FALSE
 graph_timeseries(covid_19, TOTAL_CASES, level, states, counties, log_y)
 graph_timeseries(covid_19, TOTAL_DEATHS, level, states, counties, log_y)
 
-graph_timeseries(covid_19, TOTAL_INFECTED_PER_100K, level, states, counties, log_y)
+graph_timeseries(covid_19, TOTAL_CASES_PER_100K, level, states, counties, log_y)
 graph_timeseries(covid_19, TOTAL_DEATHS_PER_100K, level, states, counties, log_y)
 
 graph_timeseries(covid_19, NEW_CASES, level, states, counties, log_y)
@@ -67,7 +67,7 @@ graph_timeseries(covid_19, AVG_DEATH_RATE, level, states, counties, log_y)
 graph_bars(covid_19, TOTAL_CASES, level, states, counties, 0)
 graph_bars(covid_19, TOTAL_DEATHS, level, states, counties, 0)
 
-graph_bars(covid_19, TOTAL_INFECTED_PER_100K, level, states, counties, 1)
+graph_bars(covid_19, TOTAL_CASES_PER_100K, level, states, counties, 1)
 graph_bars(covid_19, TOTAL_DEATHS_PER_100K, level, states, counties, 3)
 
 graph_bars(covid_19, NEW_CASES, level, states, counties, 0)
