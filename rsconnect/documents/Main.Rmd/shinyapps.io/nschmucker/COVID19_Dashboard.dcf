@@ -1,0 +1,12 @@
+name: COVID19_Dashboard
+title: COVID19_Dashboard
+username:
+account: nschmucker
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2102226
+bundleId: 3001835
+url: https://nschmucker.shinyapps.io/COVID19_Dashboard/
+when: 1586658816.58294
+asMultiple: FALSE
+asStatic: FALSE
