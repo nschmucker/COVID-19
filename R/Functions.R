@@ -24,11 +24,11 @@ consolidate_levels <- function(df_states, df_counties){
     dplyr::filter(!STATE %in% c(
       "Alaska", "Guam", "Hawaii", "Northern Mariana Islands",
       "Puerto Rico", "Virgin Islands"
-    )) %>%  
+    )) %>%
     dplyr::transmute(
       DATE,
       LEVEL = "County",
-      GEOID = FIPS,
+      GEOID = dplyr::if_else(COUNTY == "New York City", "36NYC", FIPS),
       STATE_FIPS = dplyr::if_else(
         stringr::str_length(FIPS) == 5,
         stringr::str_trunc(FIPS, 2, "right", ""),
@@ -45,7 +45,8 @@ consolidate_levels <- function(df_states, df_counties){
       TOTAL_DEATHS = DEATHS
     )
   
-  dplyr::bind_rows(clean_states, clean_counties)
+  dplyr::bind_rows(clean_states, clean_counties) %>% 
+    dplyr::filter(!is.na(GEOID))
 }
 
 add_population <- function(df, census_df){
@@ -103,15 +104,14 @@ beautify <- function(df){
         COUNTY_FIPS == "000", NA_character_, COUNTY_FIPS
       ) # "000" needed for join, but analysis is cleaner if NA instead
     ) %>% 
-    dplyr::mutate_if(is.character, forcats::as_factor) %>% 
     dplyr::select(-POPULATION, POPULATION)
 }
 
-prep_output_data <- function(df, metric, log_y, latest){
+prep_output_data <- function(df, metric, log_axis, latest){
   temp_df <-
     df %>%
-    dplyr::filter(!log_y | {{metric}} != 0) %>% # Can't log transform a 0
-    dplyr::filter(!is.na({{metric}})) %>%       # Avoid missing value warning
+    dplyr::filter(log_axis == "No" | {{metric}} != 0) %>% # Can't log transform a 0
+    dplyr::filter(!is.na({{metric}})) %>% # Avoid missing value warning
     dplyr::filter(!latest | LATEST_DATA_IND == 1)
   
   max_val <- temp_df %>% 
@@ -119,84 +119,92 @@ prep_output_data <- function(df, metric, log_y, latest){
     dplyr::pull()
   digits <- if(max_val > 100) {0} else if(max_val > 10) {1} else {2}
   
+  # If both states and counties are present, keep only states
+  state_level_present <- max(as.integer(temp_df$LEVEL == "State")) == 1
+  
   temp_df %>% 
+    dplyr::filter(!state_level_present | LEVEL == "State") %>%
     dplyr::mutate(
-      GEOID = as.character(GEOID),
       VALUE = round({{metric}}, digits),
-      NAME = dplyr::if_else(LEVEL == "State", as.character(STATE_NAME), as.character(COUNTY_NAME)),
+      NAME = dplyr::if_else(LEVEL == "State", STATE_NAME, COUNTY_NAME),
       LABEL = paste0("<strong>", NAME, "</strong><br/>", VALUE)
     ) %>% 
     dplyr::select(
       LEVEL, GEOID,
-      DATE, VALUE_FULL = {{metric}}, VALUE,
+      DATE, LATEST_DATA_IND, VALUE_FULL = {{metric}}, VALUE,
       STATE_NAME, COUNTY_NAME, NAME, LABEL
     ) %>% 
     dplyr::arrange(dplyr::desc(DATE), dplyr::desc(VALUE_FULL))
 }
 
-# get_plot_data <- function(df, metric, level, states, counties, log_y, latest){
-#   df %>% 
-#     dplyr::filter(LEVEL == level) %>%           # State or county data?
-#     dplyr::filter("All" %in% states | STATE_NAME %in% states) %>% 
-#     dplyr::filter("All" %in% counties | COUNTY_NAME %in% counties) %>% 
-#     dplyr::filter(!log_y | {{metric}} != 0) %>% # Can't log transform a 0
-#     dplyr::filter(!is.na({{metric}})) %>%       # Avoid ggplot2 missing value warning
-#     dplyr::filter(!latest | LATEST_DATA_IND == 1) %>% 
-#     dplyr::select(DATE, {{metric}}, STATE_NAME, COUNTY_NAME)
-#   }
+add_nyc_counties <- function(df){
+  new_rows <- dplyr::filter(df, GEOID == "36NYC")
 
-# graph_timeseries <- function(df, metric, level, states, counties, log_y){
-#   title        <- paste0("# ", tolower(totitle(deparse(substitute(metric)))), " over time")
-#   subtitle     <- paste0("By ", tolower(level))
-#   x_lab        <- NULL
-#   y_lab        <- paste0("# ", tolower(totitle(deparse(substitute(metric)))))
-#   caption      <- "Source: NYT"
-#   legend_title <- level
-#   
-#   get_plot_data(
-#     df, {{metric}},
-#     level, states, counties,
-#     log_y, latest = FALSE
-#   ) %>% 
-#     # Main plot
-#     ggplot2::ggplot(ggplot2::aes(
-#       x = DATE, y = {{metric}},
-#       group = if (level == "State") {STATE_NAME} else {COUNTY_NAME},
-#       color = if (level == "State") {STATE_NAME} else {COUNTY_NAME}
-#     )) +
-#     ggplot2::geom_line() +
-#     # Aesthetics
-#     {if (log_y) ggplot2::scale_y_log10()} +     # Log y-axis?
-#     ggplot2::labs(
-#       title = title, subtitle = subtitle,
-#       x = x_lab, y = y_lab, caption = caption
-#     ) +
-#     ggplot2::guides(
-#       color = ggplot2::guide_legend(
-#         title = legend_title,
-#         title.position = "left",
-#         direction = "horizontal"
-#       )
-#     ) +
-#     custom_theme()
-# }
+  bronx <- new_rows %>%
+    dplyr::mutate(
+      GEOID = "36005", 
+      COUNTY_NAME = "Bronx", 
+      NAME = COUNTY_NAME, 
+      LABEL = paste0("<strong>", NAME, "</strong><br/>", VALUE)
+    )
+  brooklyn <- new_rows %>%
+    dplyr::mutate(
+      GEOID = "36047", 
+      COUNTY_NAME = "Kings", 
+      NAME = COUNTY_NAME, 
+      LABEL = paste0("<strong>", NAME, "</strong><br/>", VALUE)
+    )
+  manhattan <- new_rows %>%
+    dplyr::mutate(
+      GEOID = "36061", 
+      COUNTY_NAME = "New York", 
+      NAME = COUNTY_NAME, 
+      LABEL = paste0("<strong>", NAME, "</strong><br/>", VALUE)
+    )
+  queens <- new_rows %>%
+    dplyr::mutate(
+      GEOID = "36081", 
+      COUNTY_NAME = "Queens", 
+      NAME = COUNTY_NAME, 
+      LABEL = paste0("<strong>", NAME, "</strong><br/>", VALUE)
+    )
+  staten_island <- new_rows %>%
+    dplyr::mutate(
+      GEOID = "36085", 
+      COUNTY_NAME = "Richmond", 
+      NAME = COUNTY_NAME, 
+      LABEL = paste0("<strong>", NAME, "</strong><br/>", VALUE)
+    )
+  
+  df %>% 
+    dplyr::filter(GEOID != "36NYC") %>%
+    dplyr::bind_rows(bronx, brooklyn, manhattan, queens, staten_island)
+}
 
-graph_timeseries <- function(df, metric, log_y){
+get_top_n <- function(df, n){
+  top_n_geoid <- df %>%  
+    dplyr::filter(LATEST_DATA_IND == 1) %>% 
+    dplyr::arrange(dplyr::desc(VALUE_FULL)) %>% 
+    head(n) %>% 
+    dplyr::pull(GEOID)
+  
+  dplyr::filter(df, GEOID %in% top_n_geoid)
+}
+
+graph_timeseries <- function(df, metric, log_axis){
   graph_data <- df %>% 
-    prep_output_data(
-      metric = {{metric}},
-      log_y = log_y,
-      latest = FALSE
-    ) %>% 
+    prep_output_data({{metric}}, log_axis = log_axis, latest = FALSE) %>% 
     dplyr::mutate(DATE = highcharter::datetime_to_timestamp(DATE))
   
+  graph_data <- get_top_n(graph_data, 8)
+
+  variable <- dplyr::select(df, {{metric}}) %>% names()
   level    <- graph_data$LEVEL[1]
   max_val  <- max(graph_data$VALUE_FULL)
-  digits   <- if(max_val > 100) {0} else if(max_val > 10) {1} else {2}
+  digits   <- if(max_val > 100) {0} else if(max_val > 10) {1} else if(max_val > 1) {2} else {3}
   
-  variable <- dplyr::select(df, {{metric}}) %>% names()
   title    <- paste0("# ", tolower(totitle(variable)), " over time")
-  subtitle <- paste0("By ", tolower(graph_data$LEVEL[1]))
+  subtitle <- paste0("By ", tolower(level))
   x_lab    <- NULL
   y_lab    <- paste0("# ", tolower(totitle(variable)))
   caption  <- "Source: NYT, U.S. Census Bureau"
@@ -206,7 +214,7 @@ graph_timeseries <- function(df, metric, log_y){
       graph_data,
       highcharter::hcaes(x = DATE, y = VALUE_FULL, group = GEOID, name = NAME),
       type = "line",
-      marker = list(enabled = TRUE, symbol="circle") 
+      marker = list(enabled = TRUE, symbol = "circle")
     ) %>%
     highcharter::hc_add_theme(hc_custom_theme()) %>%
     highcharter::hc_title(text = title) %>% 
@@ -216,7 +224,7 @@ graph_timeseries <- function(df, metric, log_y){
       title = list(text = x_lab)
     ) %>%
     highcharter::hc_yAxis(
-      type = if(log_y) {"logarithmic"} else {"linear"},
+      type = if(log_axis == "Yes") {"logarithmic"} else {"linear"},
       title = list(text = y_lab)
     ) %>% 
     highcharter::hc_credits(enabled = TRUE, text = caption) %>% 
@@ -231,7 +239,7 @@ graph_timeseries <- function(df, metric, log_y){
       buttons = list(
         list(type = "week", count = 1, text = "1wk"),
         list(type = "month", count = 1, text = "1m"),
-        list(type = "month", count = 1, text = "3m"),
+        list(type = "month", count = 3, text = "3m"),
         list(type = "all", text = "All")),
       selected = 4) %>% 
     hc_exporting(
@@ -250,37 +258,58 @@ graph_timeseries <- function(df, metric, log_y){
     )
 }
 
-graph_bars <- function(df, metric, level, states, counties, digits){
-  title        <- paste0("Latest value of ", tolower(totitle(deparse(substitute(metric)))))
-  subtitle     <- paste0("By ", tolower(level))
-  x_lab        <- NULL
-  y_lab        <- NULL
-  caption      <- "Source: NYT"
+graph_bars <- function(df, metric){
+  graph_data <- df %>% 
+    prep_output_data({{metric}}, log_axis = "No", latest = TRUE) 
   
-  get_plot_data(
-    df, {{metric}},
-    level, states, counties,
-    log_y = FALSE, latest = TRUE
-  ) %>% 
-    # Main plot
-    ggplot2::ggplot(ggplot2::aes(
-      x = if (level == "State") {
-        forcats::fct_reorder(STATE_NAME, {{metric}})
-        } else {
-        forcats::fct_reorder(COUNTY_NAME, {{metric}})
-      },
-      y = {{metric}},
-      label = round({{metric}}, digits)
-    )) +
-    ggplot2::geom_col(color = "white", fill = "blue") +
-    ggplot2::geom_text(
-      color = "grey",
-      size = 3.25, vjust = -1
-    ) +
-    # Aesthetics
-    ggplot2::labs(
-      title = title, subtitle = subtitle,
-      x = x_lab, y = y_lab, caption = caption
-    ) +
-    custom_theme()
+  graph_data <- get_top_n(graph_data, 20)
+  
+  variable <- dplyr::select(df, {{metric}}) %>% names()
+  level    <- graph_data$LEVEL[1]
+  max_val  <- max(graph_data$VALUE_FULL)
+  digits   <- if(max_val > 100) {0} else if(max_val > 10) {1} else {2}
+  
+  title    <- paste0("Latest value of ", tolower(totitle(variable)))
+  subtitle <- paste0("By ", tolower(level))
+  x_lab    <- level
+  y_lab    <- paste0("# ", tolower(totitle(variable)))
+  caption  <- "Source: NYT, U.S. Census Bureau"
+  
+  highcharter::highchart(type = "chart") %>%
+    highcharter::hc_add_series(
+      graph_data,
+      highcharter::hcaes(categories = NAME, y = VALUE_FULL, name = NAME),
+      type = "column"
+    ) %>%
+    highcharter::hc_add_theme(hc_custom_theme()) %>%
+    highcharter::hc_title(text = title) %>% 
+    highcharter::hc_subtitle(text = subtitle) %>% 
+    highcharter::hc_xAxis(
+      type = "category",
+      title = list(text = x_lab)
+    ) %>%
+    highcharter::hc_yAxis(
+      type = "linear",
+      title = list(text = y_lab)
+    ) %>% 
+    highcharter::hc_credits(enabled = TRUE, text = caption) %>% 
+    highcharter::hc_legend(enabled = FALSE) %>% 
+    highcharter::hc_tooltip(
+      valueDecimals = digits,
+      pointFormat = '{point.y}'
+    ) %>%
+    hc_exporting(
+      enabled = TRUE,
+      filename = "Covid-19_Chart_Export",
+      formAttributes = list(target = "_blank"),
+      buttons =
+        list(
+          contextButton =
+            list(
+              text = "Export",
+              theme = list(fill = "transparent"),
+              menuItems = hc_export_opts()
+            )
+        )
+    )
 }

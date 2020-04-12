@@ -8,7 +8,7 @@ totitle <- function(x){
 
 hc_custom_theme <- function(...){
   font_color <- "grey"
-  line_color <- "brown"
+  line_color <- "grey"
   palette <- RColorBrewer::brewer.pal(n = 8, name = "Dark2")
   
   theme <- highcharter::hc_theme(
@@ -186,73 +186,3 @@ hc_export_opts <- function(png = TRUE,
   
   x
 }
-
-# hc_custom_opts <- function(hc, export_options = hc_export_opts()){
-#   hc %>%
-#   hc_yAxis(min = 0, opposite = FALSE) %>%
-#   hc_navigator(enabled = TRUE) %>%
-#   hc_rangeSelector(enabled = FALSE) %>% 
-#   hc_tooltip(
-#     split = FALSE, shared = TRUE,
-#     headerFormat = '<span style="font-size: 10px">{point.key}</span><br/>'
-#   ) %>%
-#   hc_chart(zoomType = "xy") %>%
-#   hc_exporting(
-#     enabled = TRUE,
-#     filename = "Covid-19_Chart_Export",
-#     formAttributes = list(target = "_blank"),
-#     buttons =
-#       list(
-#         contextButton =
-#           list(
-#             text = "Export",
-#             theme = list(fill = "transparent"),
-#             menuItems = export_options
-#           )
-#       )
-#   )
-# }
-
-# custom_theme <- function(...){
-#   ggplot2::update_geom_defaults("point", list(size = 2.5))
-#   ggplot2::theme_grey(...) %+replace%
-#     ggplot2::theme(
-#       plot.background = ggplot2::element_blank(),
-#       plot.title = ggplot2::element_text(
-#         color = font_color,
-#         hjust = 0, vjust = 1, size = ggplot2::rel(1.35),
-#         margin = ggplot2::margin(t = 10, b = 15, unit = "pt")
-#       ),
-#       plot.subtitle = element_text(
-#         color = font_color,
-#         hjust = 0, vjust = 1, size = ggplot2::rel(1.1),
-#         margin = ggplot2::margin(t = -5, b = 15, unit = "pt")
-#       ),
-#       plot.caption = ggplot2::element_text(
-#         color = font_color,
-#         hjust = 1, vjust = 1, size = ggplot2::rel(0.9)
-#       ),
-#       panel.grid.major.x = ggplot2::element_blank(),
-#       panel.grid.minor = ggplot2::element_blank(),
-#       panel.border = ggplot2::element_blank(),
-#       panel.background = ggplot2::element_blank(),
-#       axis.ticks = ggplot2::element_line(color = "brown", size = 0.7),
-#       axis.line = ggplot2::element_line(color = "brown", size = 0.6),
-#       axis.text = ggplot2::element_text(color = "brown", size = ggplot2::rel(0.9)),
-#       axis.title.y = ggplot2::element_text(
-#         color = "brown", vjust = 1.5,
-#         margin = ggplot2::margin(r = 10, l = 5), angle = 90,
-#         size = ggplot2::rel(1)
-#       ),
-#       axis.title.x = element_text(
-#         colour = "brown", vjust = -.5,
-#         margin = ggplot2::margin(t = 5, b = 5),
-#         size = rel(1)
-#       ),
-#       legend.title = ggplot2::element_text(color = "brown", hjust = 0),
-#       legend.key = ggplot2::element_blank(),
-#       legend.position = "bottom",
-#       legend.text = ggplot2::element_text(color = "brown", size = ggplot2::rel(0.9)),
-#       legend.justification = "center"
-#     )
-# }
