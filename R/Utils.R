@@ -97,7 +97,7 @@ hc_custom_theme <- function(...){
   theme
 }
 
-write_export_list <- function(text, type, is_data = FALSE) {
+write_export_list <- function(text, type, is_data = FALSE){
   
   x <- list(text = text)
   
