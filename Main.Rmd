@@ -14,6 +14,9 @@ library(dplyr)
 library(stringr)
 library(zoo)     # masks as.Date
 
+# library(tigris) # only needed if refreshing shapefiles
+library(sf)
+
 library(shiny)
 library(shinyWidgets)
 library(htmltools)
@@ -32,11 +35,13 @@ source("./R/Functions.R")
 
 #TODO: Change county to "County, ST"
 #TODO: Update ReadMe
+#TODO: Note that this refreshes automatically
 #TODO: Make repo public
 
 ```
 
 ```{r get-data, include = FALSE}
+# Get census data from census.gov and COVID-19 data from NYTimes Github
 url_census   <- "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv"
 url_states   <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
 url_counties <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
@@ -45,22 +50,27 @@ raw_census   <- readr::read_csv(url(url_census))
 raw_states   <- readr::read_csv(url(url_states))
 raw_counties <- readr::read_csv(url(url_counties))
 
-# Get data on states (simplefeatures object)
-states <- tigris::states(
-  cb = TRUE, 
-  resolution = "500k", 
-  year = 2018,
-  class = "sf"
-) 
+# # Import shapefiles for mapping (only need to load and clean once)
+# # Get data on states (simplefeatures object)
+# states <- tigris::states(
+#   cb = TRUE, 
+#   resolution = "500k", 
+#   year = 2018,
+#   class = "sf"
+# ) 
+# 
+# # Get data on counties (simplefeatures object)
+# counties <- tigris::counties(
+#   state = NULL,
+#   cb = TRUE,
+#   resolution = "500k",
+#   year = 2018,
+#   class = "sf"
+# ) 
 
-# Get data on counties (simplefeatures object)
-counties <- tigris::counties(
-  state = NULL,
-  cb = TRUE,
-  resolution = "500k",
-  year = 2018,
-  class = "sf"
-) 
+# Load pre-saved state and county shapefiles
+states   <- sf::read_sf("./Data/states_clean.shp")
+counties <- sf::read_sf("./Data/counties_clean.shp")
 
 ```
 
@@ -91,37 +101,40 @@ stopifnot(
     )
 )
 
-#readr::write_csv(covid_19, paste0("./Data/COVID_19_", Sys.Date(), ".csv"))
+# readr::write_csv(covid_19, paste0("./Data/COVID_19_", Sys.Date(), ".csv"))
 
-states <- states %>% 
-  sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
-  dplyr::filter(
-    !STATEFP %in% c(
-      "02", #Alaska
-      "60", #American Samoa
-      "69", #Commonwealth of the Northern Mariana Islands
-      "66", #Guam
-      "15", #Hawaii
-      "72", #Puerto Rico
-      "78"  #United States Virgin Islands
-    )
-  ) %>% 
-  dplyr::select(-STATENS, -AFFGEOID, -STUSPS, -NAME, -LSAD, -ALAND, -AWATER)
+# states <- states %>% 
+#   sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
+#   dplyr::filter(
+#     !STATEFP %in% c(
+#       "02", #Alaska
+#       "60", #American Samoa
+#       "69", #Commonwealth of the Northern Mariana Islands
+#       "66", #Guam
+#       "15", #Hawaii
+#       "72", #Puerto Rico
+#       "78"  #United States Virgin Islands
+#     )
+#   ) %>% 
+#   dplyr::select(-STATENS, -AFFGEOID, -STUSPS, -NAME, -LSAD, -ALAND, -AWATER)
+# 
+# counties <- counties %>%
+#   sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
+#   dplyr::filter(
+#     !STATEFP %in% c(
+#       "02", #Alaska
+#       "60", #American Samoa
+#       "69", #Commonwealth of the Northern Mariana Islands
+#       "66", #Guam
+#       "15", #Hawaii
+#       "72", #Puerto Rico
+#       "78"  #United States Virgin Islands
+#     )
+#   ) %>% 
+#   dplyr::select(-COUNTYNS, -AFFGEOID, -NAME, -LSAD, -ALAND, -AWATER)
 
-counties <- counties %>%
-  sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
-  dplyr::filter(
-    !STATEFP %in% c(
-      "02", #Alaska
-      "60", #American Samoa
-      "69", #Commonwealth of the Northern Mariana Islands
-      "66", #Guam
-      "15", #Hawaii
-      "72", #Puerto Rico
-      "78"  #United States Virgin Islands
-    )
-  ) %>% 
-  dplyr::select(-COUNTYNS, -AFFGEOID, -NAME, -LSAD, -ALAND, -AWATER)
+# sf::write_sf(states, "./Data/states_clean.shp")
+# sf::write_sf(counties, "./Data/counties_clean.shp")
 
 ```
 
