@@ -1,7 +1,7 @@
 ---
 title: "COVID-19 Dashboard"
 author: "Nathaniel Schmucker"
-date: 'Updated: `r format(Sys.time(), ''%B %d, %Y'')`'
+date: "Last published: `r format(Sys.time(), '%B %d, %Y')`"
 output:
   html_document:
     theme: paper
@@ -178,8 +178,8 @@ shinyWidgets::selectizeGroupUI(
   id = "geoFilters",
   params = list(
     Level = list(inputId = "Level", title = "Reporting level:"),
-    `State Name` = list(inputId = "StateName", title = "State:"),
-    `County Name` = list(inputId = "CountyName", title = "County:")
+    State = list(inputId = "State", title = "State:"),
+    County = list(inputId = "County", title = "County:")
   ),
   label = "Filters",
   btn_label = "Clear filters",
@@ -204,7 +204,7 @@ filter_covid_19 <- shiny::callModule(
   module = shinyWidgets::selectizeGroupServer,
   id = "geoFilters",
   data = covid_19,
-  vars = c("Level", "State Name", "County Name")
+  vars = c("Level", "State", "County")
 )
 
 ```
@@ -262,7 +262,7 @@ highcharter::renderHighchart({
 DT::renderDataTable({
   filter_covid_19() %>% 
     prep_output_data(!!input$metric, log_axis = "No", latest = TRUE) %>% 
-    dplyr::select(Date, Value, `State Name`, `County Name`)
+    dplyr::select(Date, Value, State, County)
 })
 
 ```
@@ -284,7 +284,7 @@ highcharter::renderHighchart({
 DT::renderDataTable({
   filter_covid_19() %>% 
     prep_output_data(!!input$metric, log_axis = "No", latest = FALSE) %>% 
-    dplyr::select(Date, Value, `State Name`, `County Name`) %>% 
+    dplyr::select(Date, Value, State, County) %>% 
     DT::datatable()
 })
 

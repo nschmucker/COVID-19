@@ -12,8 +12,8 @@ consolidate_levels <- function(df_states, df_counties){
       GEOID = FIPS,
       STATE_FIPS = FIPS,
       COUNTY_FIPS = "000",
-      STATE_NAME = STATE,
-      COUNTY_NAME = NA_character_,
+      STATE,
+      COUNTY = NA_character_,
       TOTAL_CASES = CASES,
       TOTAL_DEATHS = DEATHS
     )
@@ -39,12 +39,12 @@ consolidate_levels <- function(df_states, df_counties){
         stringr::str_trunc(FIPS, 3, "left", ""),
         NA_character_
       ),
-      STATE_NAME = STATE,
+      STATE,
       STATE_ABBR = dplyr::if_else(
-        STATE_NAME == "District of Columbia",
-        "DC", state.abb[match(STATE_NAME, state.name)]
+        STATE == "District of Columbia",
+        "DC", state.abb[match(STATE, state.name)]
       ),
-      COUNTY_NAME = paste0(COUNTY, " (", STATE_ABBR, ")"),
+      COUNTY = paste0(COUNTY, " (", STATE_ABBR, ")"),
       TOTAL_CASES = CASES,
       TOTAL_DEATHS = DEATHS
     ) %>% 
@@ -64,8 +64,8 @@ add_population <- function(df, census_df){
       ),
       STATE_FIPS = STATE,
       COUNTY_FIPS = COUNTY,
-      STATE_NAME = STNAME,
-      COUNTY_NAME = CTYNAME,
+      STATE = STNAME,
+      COUNTY = CTYNAME,
       POPULATION = POPESTIMATE2019
     ) %>% 
     dplyr::select(STATE_FIPS, COUNTY_FIPS, POPULATION)
@@ -135,13 +135,13 @@ prep_output_data <- function(df, metric, log_axis, latest){
     dplyr::filter(!state_level_present | Level == "State") %>%
     dplyr::mutate(
       Value = round({{metric}}, digits),
-      Name = dplyr::if_else(Level == "State", `State Name`, `County Name`),
+      Name = dplyr::if_else(Level == "State", State, County),
       Label = paste0("<strong>", Name, "</strong><br/>", Value)
     ) %>% 
     dplyr::select(
       Level, GEOID,
       Date, `Latest Data Ind`, `Full Value` = {{metric}}, Value,
-      `State Name`, `County Name`, Name, Label
+      State, County, Name, Label
     ) %>% 
     dplyr::arrange(dplyr::desc(Date), dplyr::desc(`Full Value`))
 }
@@ -152,36 +152,36 @@ add_nyc_counties <- function(df){
   bronx <- new_rows %>%
     dplyr::mutate(
       GEOID = "36005", 
-      `County Name` = "Bronx", 
-      Name = `County Name`, 
+      County = "Bronx", 
+      Name = County, 
       Label = paste0("<strong>", Name, "</strong><br/>", Value)
     )
   brooklyn <- new_rows %>%
     dplyr::mutate(
       GEOID = "36047", 
-      `County Name` = "Kings", 
-      Name = `County Name`, 
+      County = "Kings", 
+      Name = County, 
       Label = paste0("<strong>", Name, "</strong><br/>", Value)
     )
   manhattan <- new_rows %>%
     dplyr::mutate(
       GEOID = "36061", 
-      `County Name` = "New York", 
-      Name = `County Name`, 
+      County = "New York", 
+      Name = County, 
       Label = paste0("<strong>", Name, "</strong><br/>", Value)
     )
   queens <- new_rows %>%
     dplyr::mutate(
       GEOID = "36081", 
-      `County Name` = "Queens", 
-      Name = `County Name`, 
+      County = "Queens", 
+      Name = County, 
       Label = paste0("<strong>", Name, "</strong><br/>", Value)
     )
   staten_island <- new_rows %>%
     dplyr::mutate(
       GEOID = "36085", 
-      `County Name` = "Richmond", 
-      Name = `County Name`, 
+      County = "Richmond", 
+      Name = County, 
       Label = paste0("<strong>", Name, "</strong><br/>", Value)
     )
   
