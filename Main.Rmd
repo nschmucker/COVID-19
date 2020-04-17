@@ -33,9 +33,7 @@ options(highcharter.lang = hcoptslang)
 source("./R/Utils.R")
 source("./R/Functions.R")
 
-#TODO: Change county to "County, ST"
 #TODO: Update ReadMe
-#TODO: Note that this refreshes automatically
 #TODO: Make repo public
 
 ```
@@ -87,15 +85,15 @@ stopifnot(
     dplyr::filter(GEOID != "36NYC")) ==
     nrow(raw_states %>%
            dplyr::filter(!state %in% c(
-             "Alaska", "Guam", "Hawaii", "Northern Mariana Islands",
-             "Puerto Rico", "Virgin Islands"
+             "Alaska", "American Samoa", "Guam", "Hawaii", 
+             "Northern Mariana Islands", "Puerto Rico", "Virgin Islands"
            )) %>% 
            dplyr::filter(!is.na(fips))
     ) +
     nrow(raw_counties %>%
            dplyr::filter(!state %in% c(
-             "Alaska", "Guam", "Hawaii", "Northern Mariana Islands",
-             "Puerto Rico", "Virgin Islands"
+             "Alaska", "American Samoa", "Guam", "Hawaii", 
+             "Northern Mariana Islands", "Puerto Rico", "Virgin Islands"
            )) %>% 
            dplyr::filter(!is.na(fips))
     )
@@ -145,8 +143,7 @@ The scale of the COVID-19 pandemic in the United States has grown rapidly since 
 #### A note on data
 This document contains maps, charts, and tables that summarize COVID-19 cases and fatalities in the United States. The New York Times aggregates data based on reports from state and local health agencies, and it has made the data public in a [GitHub repository](https://github.com/nytimes/covid-19-data). The data is for the United States only, reported at the state and county level. For reporting purposes, all New York City counties have been consolidated to one reporting unit. Other exceptions are documents on the New York Times' GitHub page. This dashboard excludes Alaska, Hawaii, and U.S. Territories.
 
-The COVID-19 data begins with the first reported coronavirus case in Washington State on Jan. 21, 2020. The New York Times updates its data regularly (as of mid-April, the update is daily), but this dashboard does not automatically retrieve the latest New York Times data. Data was last retrieved on the date listed at the top of this page.
-
+The COVID-19 data begins with the first reported coronavirus case in Washington State on Jan. 21, 2020. The New York Times updates its data regularly (as of mid-April, the update is daily around noon), and this dashboard retrieves the latest New York Times data each time it is opened. 
 Population data comes from the [U.S. Census Bureau's](https://www.census.gov/data/tables/time-series/demo/popest/2010s-counties-total.html) 2019 estimate of resident population for counties.
 
 #### Definitions
@@ -161,6 +158,7 @@ Population data comes from the [U.S. Census Bureau's](https://www.census.gov/dat
 * **Average new deaths:** 7-day rolling average number of newly-confirmed deaths due to COVID-19 (Null if fewer than 7 days)
 * **Average infection rate:** Average new cases as a percent of total cases
 * **Average death rate:** Average new deaths as a percent of total cases
+* **Case fatality rate:** Total deaths as a percent of total cases
 
 *Notes:*
 
@@ -185,7 +183,7 @@ shinyWidgets::selectizeGroupUI(
 
 shiny::varSelectInput(
   inputId = "metric", label = "Metric:",
-  data = dplyr::select(covid_19, 8:17)
+  data = dplyr::select(covid_19, 8:18)
 )
 
 shiny::radioButtons(
@@ -243,6 +241,8 @@ renderLeaflet({
 })
 
 ```
+
+#### Chart
 
 ```{r chart-latest}
 highcharter::renderHighchart({

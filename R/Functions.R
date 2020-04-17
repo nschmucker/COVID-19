@@ -3,8 +3,8 @@ consolidate_levels <- function(df_states, df_counties){
     df_states %>% 
     dplyr::rename_all(toupper) %>% 
     dplyr::filter(!STATE %in% c(
-      "Alaska", "Guam", "Hawaii", "Northern Mariana Islands",
-      "Puerto Rico", "Virgin Islands"
+      "Alaska", "American Samoa", "Guam", "Hawaii", 
+      "Northern Mariana Islands", "Puerto Rico", "Virgin Islands"
     )) %>% 
     dplyr::transmute(
       DATE,
@@ -16,14 +16,14 @@ consolidate_levels <- function(df_states, df_counties){
       COUNTY_NAME = NA_character_,
       TOTAL_CASES = CASES,
       TOTAL_DEATHS = DEATHS
-    ) 
+    )
   
   clean_counties <- 
     df_counties %>% 
     dplyr::rename_all(toupper) %>% 
     dplyr::filter(!STATE %in% c(
-      "Alaska", "Guam", "Hawaii", "Northern Mariana Islands",
-      "Puerto Rico", "Virgin Islands"
+      "Alaska", "American Samoa", "Guam", "Hawaii", 
+      "Northern Mariana Islands", "Puerto Rico", "Virgin Islands"
     )) %>%
     dplyr::transmute(
       DATE,
@@ -40,10 +40,15 @@ consolidate_levels <- function(df_states, df_counties){
         NA_character_
       ),
       STATE_NAME = STATE,
-      COUNTY_NAME = COUNTY,
+      STATE_ABBR = dplyr::if_else(
+        STATE_NAME == "District of Columbia",
+        "DC", state.abb[match(STATE_NAME, state.name)]
+      ),
+      COUNTY_NAME = paste0(COUNTY, " (", STATE_ABBR, ")"),
       TOTAL_CASES = CASES,
       TOTAL_DEATHS = DEATHS
-    )
+    ) %>% 
+    dplyr::select(-STATE_ABBR)
   
   dplyr::bind_rows(clean_states, clean_counties) %>% 
     dplyr::filter(!is.na(GEOID))
@@ -91,6 +96,8 @@ add_variables <- function(df){
       # Current infection/mortality rate
       AVG_INFECTION_RATE = AVG_NEW_CASES/TOTAL_CASES,
       AVG_DEATH_RATE = AVG_NEW_DEATHS/TOTAL_CASES,
+      
+      CASE_FATALITY_RATE = TOTAL_DEATHS / TOTAL_CASES,
       
       LATEST_DATA_IND = dplyr::if_else(DATE == max(DATE), 1, 0)
     ) %>% 
@@ -207,12 +214,16 @@ graph_timeseries <- function(df, metric, log_axis){
   subtitle <- paste0("By ", tolower(level))
   x_lab    <- NULL
   y_lab    <- paste0("# ", tolower(totitle(variable)))
-  caption  <- "Source: NYT, U.S. Census Bureau"
+  caption  <- if(variable %in% c("TOTAL_CASES_PER_100K", "TOTAL_DEATHS_PER_100K")) {
+    "Source: NYT, U.S. Census Bureau"
+  } else {
+    "Source: NYT"
+  }
   
   highcharter::highchart(type = "chart") %>%
     highcharter::hc_add_series(
       graph_data,
-      highcharter::hcaes(x = DATE, y = VALUE_FULL, group = GEOID, name = NAME),
+      highcharter::hcaes(x = DATE, y = VALUE_FULL, group = NAME, name = NAME),
       type = "line",
       marker = list(enabled = TRUE, symbol = "circle")
     ) %>%
@@ -267,13 +278,17 @@ graph_bars <- function(df, metric){
   variable <- dplyr::select(df, {{metric}}) %>% names()
   level    <- graph_data$LEVEL[1]
   max_val  <- max(graph_data$VALUE_FULL)
-  digits   <- if(max_val > 100) {0} else if(max_val > 10) {1} else {2}
+  digits   <- if(max_val > 100) {0} else if(max_val > 10) {1} else if(max_val > 1) {2} else {3}
   
   title    <- paste0("Latest value of ", tolower(totitle(variable)))
   subtitle <- paste0("By ", tolower(level))
   x_lab    <- level
   y_lab    <- paste0("# ", tolower(totitle(variable)))
-  caption  <- "Source: NYT, U.S. Census Bureau"
+  caption  <- if(variable %in% c("TOTAL_CASES_PER_100K", "TOTAL_DEATHS_PER_100K")) {
+    "Source: NYT, U.S. Census Bureau"
+  } else {
+    "Source: NYT"
+  }
   
   highcharter::highchart(type = "chart") %>%
     highcharter::hc_add_series(
