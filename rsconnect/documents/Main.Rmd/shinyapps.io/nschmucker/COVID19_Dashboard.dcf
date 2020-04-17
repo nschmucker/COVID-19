@@ -5,8 +5,9 @@ account: nschmucker
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2102226
-bundleId: 3011834
+bundleId: 3025016
 url: https://nschmucker.shinyapps.io/COVID19_Dashboard/
-when: 1586872945.4686
+when: 1587089773.50563
 asMultiple: FALSE
 asStatic: FALSE
+additionalFiles: Data/counties_clean.dbf|Data/counties_clean.prj|Data/counties_clean.shx|Data/states_clean.dbf|Data/states_clean.prj|Data/states_clean.shx
