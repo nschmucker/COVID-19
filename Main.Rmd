@@ -1,18 +1,29 @@
 ---
 title: "COVID-19 Dashboard"
-author: "Nathaniel Schmucker" 
-date: "Updated: `r format(Sys.time(), '%B %d, %Y')`"
-runtime: shiny
-output: 
+author: "Nathaniel Schmucker"
+date: 'Updated: `r format(Sys.time(), ''%B %d, %Y'')`'
+output:
   html_document:
-    theme: paper  
+    theme: paper
+runtime: shiny
+resource_files:
+- Data/counties_clean.dbf
+- Data/counties_clean.prj
+- Data/counties_clean.shx
+- Data/states_clean.dbf
+- Data/states_clean.prj
+- Data/states_clean.shx
 ---
 
 ```{r setup, include = FALSE}
 library(readr)
 library(dplyr)
+library(purrr)
 library(stringr)
 library(zoo)     # masks as.Date
+
+# library(tigris) # only needed if refreshing shapefiles
+library(sf)
 
 library(shiny)
 library(shinyWidgets)
@@ -30,13 +41,10 @@ options(highcharter.lang = hcoptslang)
 source("./R/Utils.R")
 source("./R/Functions.R")
 
-#TODO: Change county to "County, ST"
-#TODO: Update ReadMe
-#TODO: Make repo public
-
 ```
 
 ```{r get-data, include = FALSE}
+# Get census data from census.gov and COVID-19 data from NYTimes Github
 url_census   <- "https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/co-est2019-alldata.csv"
 url_states   <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
 url_counties <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
@@ -45,22 +53,27 @@ raw_census   <- readr::read_csv(url(url_census))
 raw_states   <- readr::read_csv(url(url_states))
 raw_counties <- readr::read_csv(url(url_counties))
 
-# Get data on states (simplefeatures object)
-states <- tigris::states(
-  cb = TRUE, 
-  resolution = "500k", 
-  year = 2018,
-  class = "sf"
-) 
+# # Import shapefiles for mapping (only need to load and clean once)
+# # Get data on states (simplefeatures object)
+# states <- tigris::states(
+#   cb = TRUE, 
+#   resolution = "500k", 
+#   year = 2018,
+#   class = "sf"
+# ) 
+# 
+# # Get data on counties (simplefeatures object)
+# counties <- tigris::counties(
+#   state = NULL,
+#   cb = TRUE,
+#   resolution = "500k",
+#   year = 2018,
+#   class = "sf"
+# ) 
 
-# Get data on counties (simplefeatures object)
-counties <- tigris::counties(
-  state = NULL,
-  cb = TRUE,
-  resolution = "500k",
-  year = 2018,
-  class = "sf"
-) 
+# Load pre-saved state and county shapefiles
+states   <- sf::read_sf("./Data/states_clean.shp")
+counties <- sf::read_sf("./Data/counties_clean.shp")
 
 ```
 
@@ -77,51 +90,54 @@ stopifnot(
     dplyr::filter(GEOID != "36NYC")) ==
     nrow(raw_states %>%
            dplyr::filter(!state %in% c(
-             "Alaska", "Guam", "Hawaii", "Northern Mariana Islands",
-             "Puerto Rico", "Virgin Islands"
+             "Alaska", "American Samoa", "Guam", "Hawaii", 
+             "Northern Mariana Islands", "Puerto Rico", "Virgin Islands"
            )) %>% 
            dplyr::filter(!is.na(fips))
     ) +
     nrow(raw_counties %>%
            dplyr::filter(!state %in% c(
-             "Alaska", "Guam", "Hawaii", "Northern Mariana Islands",
-             "Puerto Rico", "Virgin Islands"
+             "Alaska", "American Samoa", "Guam", "Hawaii", 
+             "Northern Mariana Islands", "Puerto Rico", "Virgin Islands"
            )) %>% 
            dplyr::filter(!is.na(fips))
     )
 )
 
-#readr::write_csv(covid_19, paste0("./Data/COVID_19_", Sys.Date(), ".csv"))
+# readr::write_csv(covid_19, paste0("./Data/COVID_19_", Sys.Date(), ".csv"))
 
-states <- states %>% 
-  sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
-  dplyr::filter(
-    !STATEFP %in% c(
-      "02", #Alaska
-      "60", #American Samoa
-      "69", #Commonwealth of the Northern Mariana Islands
-      "66", #Guam
-      "15", #Hawaii
-      "72", #Puerto Rico
-      "78"  #United States Virgin Islands
-    )
-  ) %>% 
-  dplyr::select(-STATENS, -AFFGEOID, -STUSPS, -NAME, -LSAD, -ALAND, -AWATER)
+# states <- states %>% 
+#   sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
+#   dplyr::filter(
+#     !STATEFP %in% c(
+#       "02", #Alaska
+#       "60", #American Samoa
+#       "69", #Commonwealth of the Northern Mariana Islands
+#       "66", #Guam
+#       "15", #Hawaii
+#       "72", #Puerto Rico
+#       "78"  #United States Virgin Islands
+#     )
+#   ) %>% 
+#   dplyr::select(-STATENS, -AFFGEOID, -STUSPS, -NAME, -LSAD, -ALAND, -AWATER)
+# 
+# counties <- counties %>%
+#   sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
+#   dplyr::filter(
+#     !STATEFP %in% c(
+#       "02", #Alaska
+#       "60", #American Samoa
+#       "69", #Commonwealth of the Northern Mariana Islands
+#       "66", #Guam
+#       "15", #Hawaii
+#       "72", #Puerto Rico
+#       "78"  #United States Virgin Islands
+#     )
+#   ) %>% 
+#   dplyr::select(-COUNTYNS, -AFFGEOID, -NAME, -LSAD, -ALAND, -AWATER)
 
-counties <- counties %>%
-  sf::st_transform(crs = "+proj=longlat +datum=WGS84") %>% 
-  dplyr::filter(
-    !STATEFP %in% c(
-      "02", #Alaska
-      "60", #American Samoa
-      "69", #Commonwealth of the Northern Mariana Islands
-      "66", #Guam
-      "15", #Hawaii
-      "72", #Puerto Rico
-      "78"  #United States Virgin Islands
-    )
-  ) %>% 
-  dplyr::select(-COUNTYNS, -AFFGEOID, -NAME, -LSAD, -ALAND, -AWATER)
+# sf::write_sf(states, "./Data/states_clean.shp")
+# sf::write_sf(counties, "./Data/counties_clean.shp")
 
 ```
 
@@ -130,9 +146,8 @@ counties <- counties %>%
 The scale of the COVID-19 pandemic in the United States has grown rapidly since the first reported cases in Washington State in late January. As of mid-April, the U.S. has over 555,000 confirmed cases in over 1,500 counties, and over 22,000 confirmed deaths--more deaths than any other country in the world. This dashboard was created to help visualize the spread of the virus throughout the country. For more information about the sARS-CoV-2 virus and COVID-19 disease, the [CDC website](https://www.cdc.gov/coronavirus/2019-ncov/index.html) publishes up-to-date scientific information, guidance and data reports on the U.S. outbreak. 
 
 #### A note on data
-This document contains maps, charts, and tables that summarize COVID-19 cases and fatalities in the United States. The New York Times aggregates data based on reports from state and local health agencies, and it has made the data public in a [GitHub repository](https://github.com/nytimes/covid-19-data). The data is for the United States only, reported at the state and county level. For reporting purposes, all New York City counties have been consolidated to one reporting unit. Other exceptions are documents on the New York Times' GitHub page. This dashboard excludes Alaska, Hawaii, and U.S. Territories.
 
-The COVID-19 data begins with the first reported coronavirus case in Washington State on Jan. 21, 2020. The New York Times updates its data regularly (as of mid-April, the update is daily), but this dashboard does not automatically retrieve the latest New York Times data. Data was last retrieved on the date listed at the top of this page.
+This document contains maps, charts, and tables that summarize COVID-19 cases and fatalities in the United States. The New York Times aggregates data based on reports from state and local health agencies, and it has made the data public in a [GitHub repository](https://github.com/nytimes/covid-19-data). The COVID-19 data is for the Unites States only at the state and county level and begins with the first reported coronavirus case in Washington State on Jan. 21, 2020. For reporting purposes, all New York City counties have been consolidated to one reporting unit. Other exceptions are documents on the New York Times' GitHub page. This dashbaord excludes Alaska, Hawaii, and U.S. Territories. The New York Times updates its data regularly (as of mid-April, the update is daily around noon), and this dashbaord retrieves the latest New York Times data each time it is opened.
 
 Population data comes from the [U.S. Census Bureau's](https://www.census.gov/data/tables/time-series/demo/popest/2010s-counties-total.html) 2019 estimate of resident population for counties.
 
@@ -148,6 +163,7 @@ Population data comes from the [U.S. Census Bureau's](https://www.census.gov/dat
 * **Average new deaths:** 7-day rolling average number of newly-confirmed deaths due to COVID-19 (Null if fewer than 7 days)
 * **Average infection rate:** Average new cases as a percent of total cases
 * **Average death rate:** Average new deaths as a percent of total cases
+* **Case fatality rate:** Total deaths as a percent of total cases
 
 *Notes:*
 
@@ -161,9 +177,9 @@ Population data comes from the [U.S. Census Bureau's](https://www.census.gov/dat
 shinyWidgets::selectizeGroupUI(
   id = "geoFilters",
   params = list(
-    LEVEL = list(inputId = "LEVEL", title = "Reporting level:"),
-    STATE_NAME = list(inputId = "STATE_NAME", title = "State:"),
-    COUNTY_NAME = list(inputId = "COUNTY_NAME", title = "County:")
+    Level = list(inputId = "Level", title = "Reporting level:"),
+    `State Name` = list(inputId = "StateName", title = "State:"),
+    `County Name` = list(inputId = "CountyName", title = "County:")
   ),
   label = "Filters",
   btn_label = "Clear filters",
@@ -172,7 +188,7 @@ shinyWidgets::selectizeGroupUI(
 
 shiny::varSelectInput(
   inputId = "metric", label = "Metric:",
-  data = dplyr::select(covid_19, 8:17)
+  data = dplyr::select(covid_19, 8:18)
 )
 
 shiny::radioButtons(
@@ -188,7 +204,7 @@ filter_covid_19 <- shiny::callModule(
   module = shinyWidgets::selectizeGroupServer,
   id = "geoFilters",
   data = covid_19,
-  vars = c("LEVEL", "STATE_NAME", "COUNTY_NAME")
+  vars = c("Level", "State Name", "County Name")
 )
 
 ```
@@ -203,7 +219,7 @@ renderLeaflet({
     prep_output_data(!!input$metric, log_axis = "No", latest = TRUE) %>% 
     add_nyc_counties()
   
-  spatial_data <- if(data_frame$LEVEL[1] == "State") {states} else {counties}
+  spatial_data <- if(data_frame$Level[1] == "State") {states} else {counties}
   
   map <- tigris::geo_join(
     spatial_data = spatial_data,
@@ -215,21 +231,23 @@ renderLeaflet({
 
   pal <- leaflet::colorNumeric(
     palette = "YlOrRd",
-    domain = map$VALUE_FULL
+    domain = map$`Full Value`
   )
   
   leaflet(map) %>%
     leaflet::addPolygons(
       color = "#444444", weight = 1, smoothFactor = 0.5,
       opacity = 1.0, fillOpacity = 0.5,
-      fillColor = ~pal(VALUE_FULL),
-      label = ~lapply(LABEL, htmltools::HTML),
+      fillColor = ~pal(`Full Value`),
+      label = ~lapply(Label, htmltools::HTML),
       highlightOptions = leaflet::highlightOptions(
         color = "white", weight = 2, bringToFront = TRUE)
     )
 })
 
 ```
+
+#### Chart
 
 ```{r chart-latest}
 highcharter::renderHighchart({
@@ -244,7 +262,7 @@ highcharter::renderHighchart({
 DT::renderDataTable({
   filter_covid_19() %>% 
     prep_output_data(!!input$metric, log_axis = "No", latest = TRUE) %>% 
-    dplyr::select(DATE, VALUE, STATE_NAME, COUNTY_NAME)
+    dplyr::select(Date, Value, `State Name`, `County Name`)
 })
 
 ```
@@ -266,7 +284,7 @@ highcharter::renderHighchart({
 DT::renderDataTable({
   filter_covid_19() %>% 
     prep_output_data(!!input$metric, log_axis = "No", latest = FALSE) %>% 
-    dplyr::select(DATE, VALUE, STATE_NAME, COUNTY_NAME) %>% 
+    dplyr::select(Date, Value, `State Name`, `County Name`) %>% 
     DT::datatable()
 })
 
